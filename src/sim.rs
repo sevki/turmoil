@@ -5,9 +5,10 @@ use std::future::Future;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
+use wasm_bindgen::prelude::*;
 
+use crate::Duration;
 use indexmap::IndexMap;
-use tokio::time::Duration;
 use tracing::Level;
 
 use crate::host::HostTimer;
@@ -35,7 +36,7 @@ pub struct Sim<'a> {
     /// Simulation elapsed time
     elapsed: Duration,
 
-    steps: usize,
+    pub(crate) steps: usize,
 }
 
 impl<'a> Sim<'a> {
@@ -464,7 +465,6 @@ mod test {
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         sync::Semaphore,
-        time::Instant,
     };
 
     use crate::{
@@ -1055,7 +1055,7 @@ mod test {
         sim.client("client", async move {
             let mut s = TcpStream::connect("server:1234").await?;
 
-            let start = Instant::now();
+            let start = crate::clock::Clock::default().now();
             s.read_u8().await?;
             assert_eq!(global, start.elapsed());
 
@@ -1069,7 +1069,7 @@ mod test {
         sim.client("client2", async move {
             let mut s = TcpStream::connect("server:1234").await?;
 
-            let start = Instant::now();
+            let start = crate::clock::Clock::default().now();
             s.read_u8().await?;
             assert_eq!(degraded, start.elapsed());
 

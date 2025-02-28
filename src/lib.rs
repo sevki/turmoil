@@ -118,14 +118,16 @@ mod readme;
 
 mod builder;
 
-mod clock;
-
 pub use builder::Builder;
-
-use clock::{Clock, Duration, Instant};
 
 mod config;
 use config::Config;
+
+#[cfg(not(target_arch = "wasm32"))]
+use core::time::Duration;
+
+#[cfg(target_arch = "wasm32")]
+use web_time::Duration;
 
 mod dns;
 use dns::Dns;
@@ -159,6 +161,10 @@ pub use top::{LinkIter, LinksIter, SentRef};
 
 mod world;
 use world::World;
+
+use wasm_bindgen::prelude::*;
+
+pub mod lib_wasm;
 
 const TRACING_TARGET: &str = "turmoil";
 

@@ -3,10 +3,10 @@ use std::{future::Future, mem, pin::Pin, sync::Arc};
 use tokio::{
     runtime::Runtime,
     task::{JoinHandle, LocalSet},
-    time::{sleep, Duration, Instant},
+    time::{self, sleep},
 };
 
-use crate::Clock;
+use tokio::time::{Duration, Instant};
 
 use super::Result;
 
@@ -52,9 +52,6 @@ pub struct Rt<'a> {
 
     /// Whether io is enabled on this runtime.
     enable_io: bool,
-
-    /// timer
-    timer: Clock,
 }
 
 impl<'a> Rt<'a> {
@@ -73,7 +70,6 @@ impl<'a> Rt<'a> {
             nodename,
             handle: Some(handle),
             enable_io,
-            timer: Clock::default(),
         }
     }
 
@@ -94,7 +90,6 @@ impl<'a> Rt<'a> {
             nodename,
             handle: Some(handle),
             enable_io,
-            timer: Clock::default(),
         }
     }
 
@@ -108,7 +103,6 @@ impl<'a> Rt<'a> {
             nodename: String::new().into(),
             handle: None,
             enable_io: false,
-            timer: Clock::default(),
         }
     }
 
@@ -154,9 +148,7 @@ impl<'a> Rt<'a> {
     pub(crate) fn tick(&mut self, duration: Duration) -> Result<bool> {
         self.tokio.block_on(async {
             self.local
-                .run_until(async {
-                    self.timer.sleep(duration).await;
-                })
+                .run_until(async { tokio::time::sleep(duration) })
                 .await
         });
 

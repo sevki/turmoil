@@ -11,6 +11,89 @@ use std::{
 
 use wasm_bindgen::prelude::*;
 
+use crate::net::WriteHelper;
+
+#[wasm_bindgen(js_name=IpAddr)]
+#[derive(Clone, Debug)]
+pub struct WasmIpAddr {
+    // The actual IP address is stored in one of these fields
+    v4: Option<Ipv4Addr>,
+    v6: Option<Ipv6Addr>,
+}
+
+#[wasm_bindgen]
+impl WasmIpAddr {
+    #[wasm_bindgen(js_name = fromV4)]
+    pub fn from_v4(addr: Ipv4Addr) -> WasmIpAddr {
+        WasmIpAddr {
+            v4: Some(addr),
+            v6: None,
+        }
+    }
+
+    #[wasm_bindgen(js_name = fromV6)]
+    pub fn from_v6(addr: Ipv6Addr) -> WasmIpAddr {
+        WasmIpAddr {
+            v4: None,
+            v6: Some(addr),
+        }
+    }
+
+    #[wasm_bindgen(js_name = fromString)]
+    pub fn from_string(s: &str) -> Result<WasmIpAddr, JsError> {
+        match IpAddr::from_str(s) {
+            Ok(addr) => Ok(match addr {
+                IpAddr::V4(v4) => WasmIpAddr::from_v4(v4),
+                IpAddr::V6(v6) => WasmIpAddr::from_v6(v6),
+            }),
+            Err(e) => Err(JsError::new(&format!("Invalid IP address: {}", e))),
+        }
+    }
+
+    #[wasm_bindgen(js_name = isV4)]
+    pub fn is_v4(&self) -> bool {
+        self.v4.is_some()
+    }
+
+    #[wasm_bindgen(js_name = isV6)]
+    pub fn is_v6(&self) -> bool {
+        self.v6.is_some()
+    }
+
+    #[wasm_bindgen(js_name = getV4)]
+    pub fn get_v4(&self) -> Option<Ipv4Addr> {
+        self.v4.clone()
+    }
+
+    #[wasm_bindgen(js_name = getV6)]
+    pub fn get_v6(&self) -> Option<Ipv6Addr> {
+        self.v6.clone()
+    }
+
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        if let Some(v4) = &self.v4 {
+            v4.to_string()
+        } else if let Some(v6) = &self.v6 {
+            v6.to_string()
+        } else {
+            // This should never happen with the current implementation
+            "Invalid IP Address".to_string()
+        }
+    }
+
+    // Convert to the standard library type
+    pub(crate) fn to_std_ip(&self) -> Option<IpAddr> {
+        if let Some(v4) = &self.v4 {
+            Some(IpAddr::V4(*v4))
+        } else if let Some(v6) = &self.v6 {
+            Some(IpAddr::V6(*v6))
+        } else {
+            None
+        }
+    }
+}
+
 /// An IP address, either IPv4 or IPv6.
 ///
 /// This enum can contain either an [`Ipv4Addr`] or an [`Ipv6Addr`], see their
@@ -185,20 +268,99 @@ pub struct Ipv6Addr {
     octets: [u8; 16],
 }
 
-impl Display for Ipv6Addr {
+/// Write an Ipv6Addr, conforming to the canonical style described by
+/// [RFC 5952](https://tools.ietf.org/html/rfc5952).
+impl fmt::Display for Ipv6Addr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
-            self.octets[0],
-            self.octets[1],
-            self.octets[2],
-            self.octets[3],
-            self.octets[4],
-            self.octets[5],
-            self.octets[6],
-            self.octets[7]
-        )
+        // If there are no alignment requirements, write out the IP address to
+        // f. Otherwise, write it to a local buffer, then use f.pad.
+        if f.precision().is_none() && f.width().is_none() {
+            let segments = self.segments();
+
+            // Special case for :: and ::1; otherwise they get written with the
+            // IPv4 formatter
+            if self.is_unspecified() {
+                f.write_str("::")
+            } else if self.is_loopback() {
+                f.write_str("::1")
+            } else if let Some(ipv4) = self.to_ipv4() {
+                match segments[5] {
+                    // IPv4 Compatible address
+                    0 => write!(f, "::{}", ipv4),
+                    // IPv4 Mapped address
+                    0xffff => write!(f, "::ffff:{}", ipv4),
+                    _ => unreachable!(),
+                }
+            } else {
+                #[derive(Copy, Clone, Default)]
+                struct Span {
+                    start: usize,
+                    len: usize,
+                }
+
+                // Find the inner 0 span
+                let zeroes = {
+                    let mut longest = Span::default();
+                    let mut current = Span::default();
+
+                    for (i, &segment) in segments.iter().enumerate() {
+                        if segment == 0 {
+                            if current.len == 0 {
+                                current.start = i;
+                            }
+
+                            current.len += 1;
+
+                            if current.len > longest.len {
+                                longest = current;
+                            }
+                        } else {
+                            current = Span::default();
+                        }
+                    }
+
+                    longest
+                };
+
+                /// Write a colon-separated part of the address
+                #[inline]
+                fn fmt_subslice(f: &mut fmt::Formatter<'_>, chunk: &[u16]) -> fmt::Result {
+                    if let Some((first, tail)) = chunk.split_first() {
+                        write!(f, "{:x}", first)?;
+                        for segment in tail {
+                            f.write_char(':')?;
+                            write!(f, "{:x}", segment)?;
+                        }
+                    }
+                    Ok(())
+                }
+
+                if zeroes.len > 1 {
+                    fmt_subslice(f, &segments[..zeroes.start])?;
+                    f.write_str("::")?;
+                    fmt_subslice(f, &segments[zeroes.start + zeroes.len..])
+                } else {
+                    fmt_subslice(f, &segments)
+                }
+            }
+        } else {
+            // Slow path: write the address to a local buffer, the use f.pad.
+            // Defined recursively by using the fast path to write to the
+            // buffer.
+
+            // This is the largest possible size of an IPv6 address
+            const IPV6_BUF_LEN: usize = (4 * 8) + 7;
+            let mut buf = [0u8; IPV6_BUF_LEN];
+            let mut buf_slice = WriteHelper::new(&mut buf[..]);
+
+            // Note: This call to write should never fail, so unwrap is okay.
+            write!(buf_slice, "{}", self).unwrap();
+            let len = IPV6_BUF_LEN - buf_slice.into_raw().len();
+
+            // This is safe because we know exactly what can be in this buffer
+            let buf = unsafe { core::str::from_utf8_unchecked(&buf[..len]) };
+            f.pad(buf)
+        }
     }
 }
 
