@@ -2,7 +2,7 @@ name: CI Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
 
 env:
@@ -13,12 +13,14 @@ jobs:
     name: Build and Test
     runs-on: ${{ matrix.os }}
     strategy:
-      matrix :
+      matrix:
         features: ["", regex]
         os: [ubuntu-latest]
     steps:
-      - name: Git Checkout
+      - name: Git Checkout with submodules
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cargo Test
@@ -37,7 +39,7 @@ jobs:
     name: Run Clippy
     runs-on: ${{ matrix.os }}
     strategy:
-      matrix :
+      matrix:
         os: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v4

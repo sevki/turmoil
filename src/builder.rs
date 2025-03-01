@@ -1,6 +1,10 @@
-use std::{ops::RangeInclusive, time::SystemTime};
+use std::{
+    ops::RangeInclusive,
+    time::{Duration, SystemTime},
+};
 
 use rand::{RngCore, SeedableRng};
+use wasm_bindgen::prelude::*;
 
 use crate::*;
 

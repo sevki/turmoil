@@ -16,18 +16,39 @@ readme = "README.md"
 keywords = ["Deterministic", "Simulation", "Testing"]
 categories = ["asynchronous", "network-programming", "simulation"]
 
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [workspace]
-members = ["examples/*"]
+members = ["examples/*", "wasm-test"]
 
 [dependencies]
 bytes = "1.4"
+cfg-if = "1.0.0"
 indexmap = "2"
+once_cell = { version = "1.19.0", features = ["std"] }
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_distr = "0.4.3"
 regex = { version = "1", optional = true }
 scoped-tls = "1.0.1"
-tokio = { version = "1.25.0", features = ["full", "test-util"] }
+tokio = { version = "1.43.0",workspace = true}
+tokio_with_wasm = { version = "0.8.2", features = ["rt", "time"] }
 tracing = "0.1"
+web-time = "1.1.0"
+
+# not wasm32 with target.cfg
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+getrandom = { version = "0.2.15", features = ["js"] }
+tokio = { workspace = true, features = ["sync", "test-util", "time"], default-features = false }
+web-sys = { version = "0.3.77", features = ["Window"] }
+wasm-bindgen-futures = "0.4.50"
+js-sys = "0.3.77"
 
 [dev-dependencies]
 doc-comment = "0.3.3"
@@ -41,3 +62,21 @@ regex = ["dep:regex"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tokio_unstable)'] }
+
+[workspace.dependencies]
+tokio= { path = "tokio/tokio"}
+
+[workspace.metadata.spellcheck]
+config = "spellcheck.toml"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(fuzzing)',
+  'cfg(loom)',
+  'cfg(mio_unsupported_force_poll_poll)',
+  'cfg(tokio_internal_mt_counters)',
+  'cfg(tokio_no_parking_lot)',
+  'cfg(tokio_no_tuning_tests)',
+  'cfg(tokio_taskdump)',
+  'cfg(tokio_unstable)',
+] }

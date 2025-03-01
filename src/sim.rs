@@ -1,13 +1,14 @@
+use crate::net::IpAddr;
 use rand::seq::SliceRandom;
 use std::cell::RefCell;
 use std::future::Future;
-use std::net::IpAddr;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
+use wasm_bindgen::prelude::*;
 
+use crate::Duration;
 use indexmap::IndexMap;
-use tokio::time::Duration;
 use tracing::Level;
 
 use crate::host::HostTimer;
@@ -35,7 +36,7 @@ pub struct Sim<'a> {
     /// Simulation elapsed time
     elapsed: Duration,
 
-    steps: usize,
+    pub(crate) steps: usize,
 }
 
 impl<'a> Sim<'a> {
@@ -447,28 +448,28 @@ impl<'a> Sim<'a> {
 
 #[cfg(test)]
 mod test {
-    use rand::Rng;
-    use std::future;
-    use std::{
-        net::{IpAddr, Ipv4Addr},
-        rc::Rc,
-        sync::{
-            atomic::{AtomicU64, Ordering},
-            Arc, Mutex,
+    use {
+        rand::Rng,
+        std::{
+            future,
+            net::{IpAddr, Ipv4Addr},
+            rc::Rc,
+            sync::{
+                atomic::{AtomicU64, Ordering},
+                Arc, Mutex,
+            },
+            time::Duration,
         },
-        time::Duration,
     };
 
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         sync::Semaphore,
-        time::Instant,
     };
 
-    use crate::net::UdpSocket;
     use crate::{
         elapsed, hold,
-        net::{TcpListener, TcpStream},
+        net::{TcpListener, TcpStream, UdpSocket},
         sim_elapsed, Builder, Result, Sim, World,
     };
 
@@ -1054,7 +1055,7 @@ mod test {
         sim.client("client", async move {
             let mut s = TcpStream::connect("server:1234").await?;
 
-            let start = Instant::now();
+            let start = crate::clock::Clock::default().now();
             s.read_u8().await?;
             assert_eq!(global, start.elapsed());
 
@@ -1068,7 +1069,7 @@ mod test {
         sim.client("client2", async move {
             let mut s = TcpStream::connect("server:1234").await?;
 
-            let start = Instant::now();
+            let start = crate::clock::Clock::default().now();
             s.read_u8().await?;
             assert_eq!(degraded, start.elapsed());
 

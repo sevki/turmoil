@@ -1,12 +1,12 @@
-use std::future::Future;
-use std::mem;
-use std::pin::Pin;
-use std::sync::Arc;
+use std::{future::Future, mem, pin::Pin, sync::Arc};
 
-use tokio::runtime::Runtime;
-use tokio::task::JoinHandle;
-use tokio::task::LocalSet;
-use tokio::time::{sleep, Duration, Instant};
+use tokio::{
+    runtime::Runtime,
+    task::{JoinHandle, LocalSet},
+    time::{self, sleep},
+};
+
+use tokio::time::{Duration, Instant};
 
 use super::Result;
 
@@ -148,9 +148,7 @@ impl<'a> Rt<'a> {
     pub(crate) fn tick(&mut self, duration: Duration) -> Result<bool> {
         self.tokio.block_on(async {
             self.local
-                .run_until(async {
-                    sleep(duration).await;
-                })
+                .run_until(async { tokio::time::sleep(duration) })
                 .await
         });
 
@@ -220,6 +218,7 @@ fn init(enable_io: bool) -> (Runtime, LocalSet) {
     #[cfg(tokio_unstable)]
     tokio_builder.unhandled_panic(tokio::runtime::UnhandledPanic::ShutdownRuntime);
 
+    #[cfg(not(target_arch = "wasm32"))]
     if enable_io {
         tokio_builder.enable_io();
     }
