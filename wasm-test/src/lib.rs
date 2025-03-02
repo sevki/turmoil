@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str;
+use std::sync::Once;
 use turmoil::net;
 use turmoil::net::IpAddr as TurmoilIpAddr;
 use turmoil::net::SocketAddr as TurmoilSocketAddr;
@@ -16,6 +17,21 @@ mod wasm_bindings_test;
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
+    use tracing_subscriber::fmt;
+    use tracing_subscriber_wasm::MakeConsoleWriter;
+    static SET_HOOK: Once = Once::new();
+    SET_HOOK.call_once(|| {
+        fmt()
+            .with_writer(
+                // To avoide trace events in the browser from showing their
+                // JS backtrace, which is very annoying, in my opinion
+                MakeConsoleWriter::default().map_trace_level_to(tracing::Level::DEBUG),
+            )
+            // For some reason, if we don't do this in the browser, we get
+            // a runtime error.
+            .without_time()
+            .init();
+    });
 }
 
 #[wasm_bindgen]
@@ -118,7 +134,7 @@ pub fn test_turmoil_socket_addr() -> String {
 }
 
 // Regular tests
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
 
@@ -162,9 +178,6 @@ fn make_error(msg: String) -> Box<dyn Error + 'static> {
 // Test basic TCP functionality - simplified version
 #[wasm_bindgen]
 pub fn test_tcp_functionality() -> String {
-    // Set panic hook for better error messages
-    console_error_panic_hook::set_once();
-
     let mut sim = Builder::new().build();
 
     // Just test that we can create a TCP socket and the simulation doesn't crash
@@ -190,9 +203,6 @@ pub fn test_tcp_functionality() -> String {
 // Test basic UDP functionality - simplified version
 #[wasm_bindgen]
 pub fn test_udp_functionality() -> String {
-    // Set panic hook for better error messages
-    console_error_panic_hook::set_once();
-
     let mut sim = Builder::new().build();
 
     // Just test that we can create a UDP socket
@@ -216,9 +226,6 @@ pub fn test_udp_functionality() -> String {
 // Test builder configuration
 #[wasm_bindgen]
 pub fn test_builder_config() -> String {
-    // Set panic hook for better error messages
-    console_error_panic_hook::set_once();
-
     let builder = Builder::new();
     let mut sim = builder.build();
 
@@ -233,9 +240,6 @@ pub fn test_builder_config() -> String {
 // Test DNS functionality - simplified for WASM
 #[wasm_bindgen]
 pub fn test_dns_functionality() -> String {
-    // Set panic hook for better error messages
-    console_error_panic_hook::set_once();
-
     // Create a builder with explicit configuration for WASM
     let mut builder = Builder::new();
 
@@ -295,7 +299,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn test_tcp_in_wasm() {
-        console_error_panic_hook::set_once();
+        // Panic hook is already set in start()
         let result = test_tcp_functionality();
         assert_eq!(result, "success", "TCP test failed: {}", result);
     }

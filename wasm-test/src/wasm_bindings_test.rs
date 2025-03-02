@@ -3,6 +3,8 @@
 #[cfg(target_arch = "wasm32")]
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use js_sys::Function;
     use turmoil::lib_wasm::TurmoilBuilder;
     use wasm_bindgen::prelude::*;
@@ -12,8 +14,18 @@ mod tests {
 
     // Helper function to create a JavaScript callback function
     fn create_js_callback() -> Function {
+        // Create a function that returns a Promise which resolves after a timeout
+        // This simulates an asynchronous operation in JavaScript
         let callback = js_sys::Function::new_no_args(
-            "return new Promise(resolve => setTimeout(() => resolve('callback-done'), 10));",
+            r#"
+            console.log('Callback started');
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    console.log('Callback resolved');
+                    resolve('callback-done');
+                }, 10);
+            });
+            "#,
         );
         callback
     }
@@ -66,15 +78,15 @@ mod tests {
 
         // Add a host
         let result = sim.host("test-host", create_js_callback());
+
+        // Don't unwrap as it might fail with timeout which is expected
+        let _ = sim.run();
+
         assert!(result.is_ok());
 
-        // In our revised implementation, we don't return a host directly
-        // Test the sim function instead to verify everything works
         assert!(sim.steps() >= 1);
 
-        // Note: we can't effectively test host running state in the JS environment
-        // as the isolated test environment doesn't maintain consistent state with the
-        // simulation, so we'll just test the API exists by avoiding assertion errors
+        result.unwrap();
     }
 
     #[wasm_bindgen_test]
@@ -83,8 +95,8 @@ mod tests {
         let mut sim = TurmoilBuilder::new().simulation_duration_ms(1000.0).build();
 
         // Add two hosts
-        sim.add_host("host1", create_js_callback());
-        sim.add_host("host2", create_js_callback());
+        sim.host("host1", create_js_callback());
+        sim.host("host2", create_js_callback());
 
         // Test network manipulation
         let partition_result = sim.partition("host1", "host2");
@@ -100,8 +112,7 @@ mod tests {
         assert!(release_result.is_ok());
 
         // Run the simulation after network manipulation
-        let run_result = sim.run();
-        assert!(run_result.is_ok());
+        let _ = sim.run().unwrap();
     }
 
     #[wasm_bindgen_test]
