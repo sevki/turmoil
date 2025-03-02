@@ -92,7 +92,7 @@ impl Default for Config {
         let epoch = SystemTime::UNIX_EPOCH;
         #[cfg(not(target_arch = "wasm32"))]
         let epoch = SystemTime::now();
-        
+
         Config {
             duration: Duration::from_secs(10),
             tick: Duration::from_millis(1),

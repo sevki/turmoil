@@ -80,26 +80,38 @@ impl WasmSim {
     /// Register a host with the simulation using a JavaScript callback.
     /// Returns a WasmHost object that can be used to interact with the host.
     pub fn host(&mut self, name: &str, callback: JsFunction) -> Result<(), JsValue> {
-        let _ip = self.0.lookup(name);
-
-        // Clone the callback to move it into the closure
-        let callback_clone = callback.clone();
-
+        // Properly use the callback in a way that allows the simulation to execute it
         self.0.host(name, move || {
-            // Clone again inside the outer closure to move into the async block
-            let callback_inner = callback_clone.clone();
-
+            let callback = callback.clone();
+            
+            // Return a future that will be executed in the simulation
             async move {
-                let this = JsValue::null();
-                match callback_inner.call0(&this) {
+                // Create a new promise each time this function is called
+                let promise = Promise::new(&mut |resolve, reject| {
+                    let this = JsValue::null();
+                    match callback.call0(&this) {
+                        Ok(result) => {
+                            // Just resolve with the result
+                            let _ = resolve.call1(&JsValue::null(), &result);
+                        }
+                        Err(e) => {
+                            let _ = reject.call1(
+                                &JsValue::null(),
+                                &JsValue::from_str(&format!("Host callback error: {:?}", e)),
+                            );
+                        }
+                    }
+                });
+
+                // Wait for the promise to resolve or reject
+                match wasm_bindgen_futures::JsFuture::from(promise).await {
                     Ok(_) => Ok(()),
                     Err(e) => {
-                        // Create a generic error that matches turmoil::Result's expected type
-                        let err_msg = format!("Host callback error: {:?}", e);
-                        Err(
-                            Box::new(std::io::Error::new(std::io::ErrorKind::Other, err_msg))
-                                as Box<dyn std::error::Error>,
-                        )
+                        let err = std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Host callback failed: {:?}", e),
+                        );
+                        Err(Box::new(err) as Box<dyn std::error::Error>)
                     }
                 }
             }
@@ -111,25 +123,39 @@ impl WasmSim {
     #[wasm_bindgen]
     /// Register a client with the simulation using a JavaScript callback.
     pub fn client(&mut self, name: &str, callback: JsFunction) -> Result<(), JsValue> {
-        // Create a promise that resolves when the client is done
-        let promise = Promise::new(&mut |resolve, reject| {
-            let this = JsValue::null();
-            match callback.call0(&this) {
-                Ok(result) => {
-                    let _ = resolve.call1(&JsValue::null(), &result);
+        // Clone the callback so we can move it into the async block
+        let callback = callback.clone();
+        
+        // Properly use the callback in a way that allows the simulation to execute it
+        self.0.client(name, async move {
+            // Create a new promise each time this function is called
+            let promise = Promise::new(&mut |resolve, reject| {
+                let this = JsValue::null();
+                match callback.call0(&this) {
+                    Ok(result) => {
+                        // Just resolve with the result
+                        let _ = resolve.call1(&JsValue::null(), &result);
+                    }
+                    Err(e) => {
+                        let _ = reject.call1(
+                            &JsValue::null(),
+                            &JsValue::from_str(&format!("Client callback error: {:?}", e)),
+                        );
+                    }
                 }
+            });
+
+            // Wait for the promise to resolve or reject
+            match wasm_bindgen_futures::JsFuture::from(promise).await {
+                Ok(_) => Ok(()),
                 Err(e) => {
-                    let _ = reject.call1(
-                        &JsValue::null(),
-                        &JsValue::from_str(&format!("Client callback error: {:?}", e)),
+                    let err = std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Client callback failed: {:?}", e),
                     );
+                    Err(Box::new(err) as Box<dyn std::error::Error>)
                 }
             }
-        });
-
-        self.0.client(name, async move {
-            let _ = wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(promise)).await;
-            Ok(())
         });
 
         Ok(())
@@ -215,8 +241,37 @@ impl TurmoilBuilder {
         WasmSim(self.0.build())
     }
 
-    pub fn simulation_duration_ms(&mut self, duration_ms: f64) {
+    pub fn simulation_duration_ms(&mut self, duration_ms: f64) -> Self {
         self.0
             .simulation_duration(Duration::from_millis(duration_ms as u64));
+        Self(self.0.clone())
+    }
+
+    pub fn tick_duration_ms(&mut self, duration_ms: f64) -> Self {
+        self.0
+            .tick_duration(Duration::from_millis(duration_ms as u64));
+        Self(self.0.clone())
+    }
+
+    pub fn fail_rate(&mut self, rate: f64) -> Self {
+        self.0.fail_rate(rate);
+        Self(self.0.clone())
+    }
+
+    pub fn repair_rate(&mut self, rate: f64) -> Self {
+        self.0.repair_rate(rate);
+        Self(self.0.clone())
+    }
+
+    pub fn min_message_latency_ms(&mut self, latency_ms: f64) -> Self {
+        self.0
+            .min_message_latency(Duration::from_millis(latency_ms as u64));
+        Self(self.0.clone())
+    }
+
+    pub fn max_message_latency_ms(&mut self, latency_ms: f64) -> Self {
+        self.0
+            .max_message_latency(Duration::from_millis(latency_ms as u64));
+        Self(self.0.clone())
     }
 }
