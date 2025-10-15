@@ -149,6 +149,9 @@ pub use ip::IpVersion;
 pub mod net;
 
 mod rt;
+#[cfg(not(target_arch = "wasm32"))]
+use std::net::IpAddr;
+#[cfg(target_arch = "wasm32")]
 use net::IpAddr;
 use rt::Rt;
 
@@ -162,8 +165,10 @@ pub use top::{LinkIter, LinksIter, SentRef};
 mod world;
 use world::World;
 
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
 pub mod lib_wasm;
 
 const TRACING_TARGET: &str = "turmoil";
