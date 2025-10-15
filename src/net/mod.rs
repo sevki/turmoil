@@ -3,13 +3,22 @@
 //! They mirror [tokio::net](https://docs.rs/tokio/latest/tokio/net/) to provide
 //! a high fidelity implementation.
 
+#[cfg(not(target_arch = "wasm32"))]
+pub use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+
+#[cfg(target_arch = "wasm32")]
 pub mod parser;
+#[cfg(target_arch = "wasm32")]
 pub use parser::*;
 
+#[cfg(target_arch = "wasm32")]
 pub mod ip_addr;
+#[cfg(target_arch = "wasm32")]
 pub use ip_addr::*;
 
+#[cfg(target_arch = "wasm32")]
 pub mod socket_addr;
+#[cfg(target_arch = "wasm32")]
 pub use socket_addr::*;
 
 pub mod tcp;

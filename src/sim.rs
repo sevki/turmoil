@@ -5,6 +5,7 @@ use std::future::Future;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 use crate::Duration;
@@ -458,7 +459,7 @@ mod test {
                 atomic::{AtomicU64, Ordering},
                 Arc, Mutex,
             },
-            time::Duration,
+            time::{Duration, Instant},
         },
     };
 
@@ -1055,7 +1056,7 @@ mod test {
         sim.client("client", async move {
             let mut s = TcpStream::connect("server:1234").await?;
 
-            let start = crate::clock::Clock::default().now();
+            let start = Instant::now();
             s.read_u8().await?;
             assert_eq!(global, start.elapsed());
 
@@ -1069,7 +1070,7 @@ mod test {
         sim.client("client2", async move {
             let mut s = TcpStream::connect("server:1234").await?;
 
-            let start = crate::clock::Clock::default().now();
+            let start = Instant::now();
             s.read_u8().await?;
             assert_eq!(degraded, start.elapsed());
 
